@@ -1,0 +1,13 @@
+
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "shell",
+			"command": "make dev",
+			"label": "Dev",
+			"detail": "Start Elm",
+			"problemMatcher": []
+		}
+	]
+}
