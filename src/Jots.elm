@@ -1,4 +1,4 @@
-module Jots exposing (..)
+port module Jots exposing (..)
 
 import Browser
 import Html exposing (..)
@@ -16,7 +16,7 @@ import Set
 
 -- MAIN
 
-main : Program () Model Msg
+main : Program (Maybe String) Model Msg
 main =
     Browser.element
         { init = init
@@ -25,12 +25,26 @@ main =
         , update = update
         }
 
+
+port setPassword: String -> Cmd msg
+
+-- MODEL
+
 type alias Jot =
   { id : String
   , data : String
   , time : Int
   , tag : Maybe String
   }
+
+type alias CreateJotData =
+  { text: String
+  , tag: String
+  }
+
+type CreateJotUpdate
+  = CreateJotText String
+  | CreateJotTag String
 
 type RequestState
   = Waiting
@@ -54,10 +68,12 @@ type AppState
 type alias Model =
   { appState: AppState
   , password: String
-  , jotText: String
   , getJotRequest: RequestState
   , createJotRequest: RequestState
   , jots: Maybe (List Jot)
+
+-- Create Jot Form Data
+  , createJotData: CreateJotData
 
 -- Tag stuff
   , editingTag: String
@@ -67,27 +83,35 @@ type alias Model =
   , tagFilter: JotTagFilter
   }
 
+emptyModel: Model
+emptyModel =
+  { appState = EnteringPassword
+  , password = ""
+  , getJotRequest = Waiting
+  , createJotRequest = Waiting
+  , jots = Nothing
+  , createJotData = { text="", tag="" }
+  , editingTag = ""
+  , tagText = ""
+  , setTagRequest = Waiting
+  , tagFilter = NoTagFilter
+  }
 
-init: () -> (Model, Cmd Msg)
-init _ =
-  (Model EnteringPassword "" "" Waiting Waiting Nothing "" "" Waiting NoTagFilter, Cmd.none)
 
--- UPDATE
+-- This will be passed the password if it is in the local storage
+init: Maybe String -> (Model, Cmd Msg)
+init maybePassword =
+  case maybePassword of
+    Just password ->
+      let
+          newModel = { emptyModel | password = password }
+      in
+        (newModel, getJotsRequest newModel)
+    Nothing ->
+      (emptyModel, Cmd.none)
 
-type Msg
-  = GetEntries
-  | GetJotsResponse (Result Http.Error (List Jot))
-  | CreateJotResponse (Result Http.Error String)
-  | SetTagResponse (Result Http.Error String)
-  | Password String
-  | JotText String
-  | ShowJotForm
-  | ShowJots
-  | CreateJot
-  | EditTag String
-  | SetTag String
-  | UpdateTag
-  | SetTagFilter JotTagFilter
+
+-- Netowrk Commands
 
 baseApiUrl : String
 baseApiUrl = "http://api.tylertracy.com"
@@ -105,12 +129,12 @@ getJotsRequest model =
     , expect = Http.expectJson GetJotsResponse noteDecoder
     }
 
-createJotRequest: Model -> String -> Cmd Msg
-createJotRequest model jotText =
+createJotRequest: Model -> Cmd Msg
+createJotRequest model =
   Http.post
   { url= getApiUrl model "/jot"
   , expect = Http.expectString CreateJotResponse
-  , body = Http.jsonBody (createJotEncoder model.jotText)
+  , body = Http.jsonBody (createJotEncoder model.createJotData.text model.createJotData.tag)
   }
 
 setTagRequest: Model -> String -> String -> Cmd Msg
@@ -120,6 +144,23 @@ setTagRequest model jotId tag =
   , expect = Http.expectString SetTagResponse
   , body = Http.jsonBody (tagJotEncoder model.tagText)
   }
+
+-- UPDATE
+
+type Msg
+  = GetEntries
+  | GetJotsResponse (Result Http.Error (List Jot))
+  | CreateJotResponse (Result Http.Error String)
+  | SetTagResponse (Result Http.Error String)
+  | Password String
+  | UpdateCreateJotData CreateJotUpdate
+  | ShowJotForm
+  | ShowJots
+  | CreateJot
+  | EditTag String
+  | SetTag String
+  | UpdateTag
+  | SetTagFilter JotTagFilter
 
 update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =
@@ -131,7 +172,7 @@ update msg model =
            | getJotRequest = Success
            , jots = Just jots
            , appState = ViewingJots
-           }, Cmd.none)
+           }, setPassword model.password)
         Err error ->
           ( {model | getJotRequest = Failure error}, Cmd.none)
 
@@ -162,8 +203,15 @@ update msg model =
     Password password ->
       ({ model | password = password }, Cmd.none)
 
-    JotText jotText ->
-      ({ model | jotText=jotText }, Cmd.none)
+    UpdateCreateJotData createJotUpdate ->
+      let
+        oldCreateJot = .createJotData model
+        newCreateJot = (
+          case createJotUpdate of
+            CreateJotText text -> {oldCreateJot | text = text}
+            CreateJotTag tag -> {oldCreateJot | tag = tag})
+      in
+        ({model | createJotData = newCreateJot }, Cmd.none)
 
     ShowJotForm ->
       ({ model | appState = CreatingJot }, Cmd.none)
@@ -173,7 +221,7 @@ update msg model =
 
     CreateJot ->
       ({ model | createJotRequest = Loading }
-      , createJotRequest model model.jotText)
+      , createJotRequest model)
 
     -- Tag Stuff
     EditTag jotId ->
@@ -189,6 +237,8 @@ update msg model =
     SetTagFilter tag ->
       ({ model | tagFilter = tag }, Cmd.none )
 
+
+-- PURE LOGIC
 
 setTagIfSameId: String -> String -> Jot -> Jot
 setTagIfSameId jotId tag jot =
@@ -215,6 +265,30 @@ getUniqueTags jots =
     |> Set.fromList
     |> Set.toList
 
+filterJots: JotTagFilter -> Jot -> Bool
+filterJots filter jot =
+  case filter of
+    NoTagFilter -> True
+    TagFilter tag -> case jot.tag of
+      Just jotTag -> jotTag == tag
+      Nothing -> False
+
+toMonthString : Time.Month -> String
+toMonthString month =
+  case month of
+    Time.Jan -> "January"
+    Time.Feb -> "Febuary"
+    Time.Mar -> "March"
+    Time.Apr -> "April"
+    Time.May -> "May"
+    Time.Jun -> "June"
+    Time.Jul -> "July"
+    Time.Aug -> "August"
+    Time.Sep -> "September"
+    Time.Oct -> "October"
+    Time.Nov -> "November"
+    Time.Dec -> "December"
+
 
 -- SUBSCRIPTIONS
 
@@ -234,25 +308,6 @@ view model =
       CreatingJot -> viewCreateJot model
     ]
 
-
-viewCreateJotButton: Model -> Html Msg
-viewCreateJotButton model =
-  button
-    [ style "position" "fixed"
-    , style "bottom" "30px"
-    , style "right" "30px"
-    , style "border-radius" "50%"
-    , style "backgroundColor" "red"
-    , style "color" "white"
-    , style "border" "1px solid white"
-    , style "width" "70px"
-    , style "height" "70px"
-    , style "font-size" "3em"
-    , style "cursor" "pointer"
-    , onClick ShowJotForm
-    ]
-    [ text "+" ]
-
 viewMain: Model -> Html Msg
 viewMain model =
   case model.jots of
@@ -263,7 +318,12 @@ viewMain model =
           [ div [] (viewJots model jots)
           , br [] []
           ]
-        , viewCreateJotButton model
+        , button
+            [ id "createJotButton"
+            , onClick ShowJotForm
+            ] [
+              text "+"
+            ]
         ]
     Nothing -> text ""
 
@@ -290,15 +350,6 @@ viewTagButton tag =
           TagFilter tagText -> text tagText
       ]
 
-
-filterJots: JotTagFilter -> Jot -> Bool
-filterJots filter jot =
-  case filter of
-    NoTagFilter -> True
-    TagFilter tag -> case jot.tag of
-      Just jotTag -> jotTag == tag
-      Nothing -> False
-
 viewJots: Model -> List Jot -> List (Html Msg)
 viewJots model jots =
   jots
@@ -306,27 +357,10 @@ viewJots model jots =
     |> List.filter (filterJots model.tagFilter)
     |> List.map (viewJot model)
 
-centerBoxStyle: List (Attribute msg)
-centerBoxStyle =
-  [ style "position" "absolute"
-  , style "top" "50%"
-  , style "left" "50%"
-  , style "backgroundColor" "white"
-  , style "transform" "translate(-50%, -50%)"
-  , style "border" "1px solid black"
-  , style "border-radius" "10px"
-  , style "padding" "10px"
-  ]
-
-buttonStyle =
-  [ style "border" "none"
-  , style "background-color" "#c33"
-  , style "margin" "auto"
-  ]
-
 viewPasswordInput: Model -> Html Msg
 viewPasswordInput model =
-  div centerBoxStyle
+  div
+    [ class "centerBox" ]
     [ h1 [ align "center" ] [text "JOT"]
     , input [ type_ "text", placeholder "Enter Password", value model.password, onInput Password ] []
     , br [] []
@@ -341,19 +375,10 @@ viewPasswordInput model =
         Success -> text "success"
     ]
 
-
-jotStyle : List (Attribute msg)
-jotStyle =
-    [ style "border-radius" "5px"
-    , style "background-color" "#f2f2f2"
-    , style "padding" "20px"
-    , style "margin" "10px"
-    , style "border" "2px solid black"
-    ]
-
 viewJot: Model -> Jot -> Html Msg
 viewJot model jot =
-  div jotStyle
+  div
+    [ class "jot" ]
     [ text jot.data
     , br [] []
     , if jot.id == model.editingTag then
@@ -377,35 +402,20 @@ viewDate posix =
     ++ " "
     ++ String.fromInt (Time.toYear Time.utc posix)
 
-toMonthString : Time.Month -> String
-toMonthString month =
-  case month of
-    Time.Jan -> "January"
-    Time.Feb -> "Febuary"
-    Time.Mar -> "March"
-    Time.Apr -> "April"
-    Time.May -> "May"
-    Time.Jun -> "June"
-    Time.Jul -> "July"
-    Time.Aug -> "August"
-    Time.Sep -> "September"
-    Time.Oct -> "October"
-    Time.Nov -> "November"
-    Time.Dec -> "December"
-
-
 viewCreateJot: Model -> Html Msg
 viewCreateJot model =
-  div centerBoxStyle
-    [ input [ type_ "text", onInput JotText ] []
+  div
+    [ class "centerBox" ]
+    [ textarea [ placeholder "Jot", onInput (\s -> UpdateCreateJotData (CreateJotText s)) ] []
     , br [] []
-    , input [ type_ "text", placeholder "tag" ] []
+    , input [ type_ "text", placeholder "tag", onInput (\s -> UpdateCreateJotData (CreateJotTag s)) ] []
+    , br [] []
     , button [ onClick CreateJot ] [text "Create Jot"]
     , br [] []
     , button [ onClick ShowJots] [text "Cancel"]
     ]
 
-
+-- JSON SHIT
 
 noteDecoder: Decoder (List Jot)
 noteDecoder =
@@ -420,10 +430,11 @@ entryDecoder =
     (field "time" int)
     (Json.Decode.maybe (field "tag" string))
 
-createJotEncoder: String -> Json.Encode.Value
-createJotEncoder jotText =
+createJotEncoder: String -> String -> Json.Encode.Value
+createJotEncoder jotText jotTag =
   Json.Encode.object
     [ ("text", Json.Encode.string jotText)
+    , ("tag", Json.Encode.string jotTag )
     ]
 
 tagJotEncoder: String -> Json.Encode.Value
