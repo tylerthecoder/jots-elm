@@ -114,7 +114,7 @@ init maybePassword =
 -- Netowrk Commands
 
 baseApiUrl : String
-baseApiUrl = "http://api.tylertracy.com"
+baseApiUrl = "https://api.tylertracy.com"
 -- baseApiUrl = "http://localhost:3000"
 
 getApiUrl: Model -> String -> String
