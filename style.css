@@ -1,5 +1,3 @@
-
-
 #createJotButton {
   position: fixed;
   bottom: 30px;
@@ -28,7 +26,19 @@
 .jot {
   border-radius: 5px;
   background-color: #f2f2f2;
-  padding: 20px;
+  padding: 10px;
   margin: 10px;
-  border: 2px solid black;
+  border: 1px solid black;
+  box-shadow: 3px 3px 1px #7777;
+}
+
+#menuButton {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  cursor: pointer;
+}
+
+#jotsPanel {
+  margin-bottom: 70px;
 }

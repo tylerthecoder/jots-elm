@@ -72,6 +72,8 @@ type alias Model =
   , createJotRequest: RequestState
   , jots: Maybe (List Jot)
 
+  , showTagPanel: Bool
+
 -- Create Jot Form Data
   , createJotData: CreateJotData
 
@@ -89,6 +91,7 @@ emptyModel =
   , password = ""
   , getJotRequest = Waiting
   , createJotRequest = Waiting
+  , showTagPanel = True
   , jots = Nothing
   , createJotData = { text="", tag="" }
   , editingTag = ""
@@ -161,6 +164,7 @@ type Msg
   | SetTag String
   | UpdateTag
   | SetTagFilter JotTagFilter
+  | ToggleTagPanel
 
 update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =
@@ -236,6 +240,9 @@ update msg model =
 
     SetTagFilter tag ->
       ({ model | tagFilter = tag }, Cmd.none )
+
+    ToggleTagPanel ->
+      ({ model | showTagPanel = not model.showTagPanel}, Cmd.none)
 
 
 -- PURE LOGIC
@@ -313,19 +320,34 @@ viewMain model =
   case model.jots of
     Just jots ->
       div [ style "display" "flex" ]
-        [ viewTagPanel model jots
-        , div []
-          [ div [] (viewJots model jots)
-          , br [] []
-          ]
-        , button
-            [ id "createJotButton"
-            , onClick ShowJotForm
-            ] [
-              text "+"
-            ]
+        [ viewMenuButton model
+        , if model.showTagPanel then
+          viewTagPanel model jots
+        else
+          text ""
+        , viewJotsPanel model jots
+        , viewCreateJotButton
         ]
     Nothing -> text ""
+
+viewMenuButton: Model -> Html Msg
+viewMenuButton model =
+  div [] [
+    i
+    [ id "menuButton"
+    , class "fas fa-bars"
+    , onClick ToggleTagPanel
+    ] []
+  ]
+
+viewCreateJotButton: Html Msg
+viewCreateJotButton =
+  button
+    [ id "createJotButton"
+    , onClick ShowJotForm
+    ]
+    [ text "+"
+    ]
 
 viewTagPanel: Model -> List Jot -> Html Msg
 viewTagPanel model jots =
@@ -338,6 +360,13 @@ viewTagPanel model jots =
       |> List.map (\tag -> viewTagButton (TagFilter tag))
       )
   ]
+
+viewJotsPanel: Model -> List Jot -> Html Msg
+viewJotsPanel model jots =
+  div
+    [ id "jotsPanel"
+    ]
+    (viewJots model jots)
 
 viewTagButton: JotTagFilter -> Html Msg
 viewTagButton tag =

@@ -6,6 +6,9 @@
   <title>Jot</title>
   <script type="text/javascript" src="elm.js"></script>
   <link rel="stylesheet" href="style.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <script src="https://kit.fontawesome.com/a076d05399.js"></script>
 </head>
 
 <body>
@@ -14,16 +17,16 @@
 <div id="elm-node"></div>
 
 <script type="text/javascript">
-const password = localStorage.getItem('jot-password');
+  const password = localStorage.getItem('jot-password');
 
-const app = Elm.Jots.init({
-  node: document.getElementById("elm-node"),
-  flags: password,
-});
+  const app = Elm.Jots.init({
+    node: document.getElementById("elm-node"),
+    flags: password,
+  });
 
-app.ports.setPassword.subscribe(password => {
+  app.ports.setPassword.subscribe(password => {
     localStorage.setItem('jot-password', password);
-});
+  });
 </script>
 
 </html>
